@@ -22,7 +22,7 @@
     "keywords": [],
     "files": [
         "dist/",
-        "src/"
+        "src/**.ts"
     ],
     "author": "",
     "license": "Apache-2.0",
