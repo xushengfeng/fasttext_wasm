@@ -1,76 +1,23 @@
-# WebAssembly support
-Compiled wasm files
+# fastText wasm
 
-## How to run
-This folder is dedicated to testing and compiling the new WASM wrapper. If you are looking to the new WASM auto loading feature of `FastText.js`, please check in the examples folder `/examples/wasm.js`. Thank you!
+fastText 是 Facebook 开发的文本语言识别工具。在用于翻译语言检测时非常有用。
 
-### Predict
-```
-node predict.js
-Bonjour à tous. Ceci est du français
-[ 0.9735482335090637, '__label__fr' ]
-[ 0.014392763376235962, '__label__en' ]
-[ 0.0022527812980115414, '__label__la' ]
-[ 0.001576810609549284, '__label__vi' ]
-[ 0.0015742615796625614, '__label__it' ]
-Hello, world. This is english
-[ 0.9395676255226135, '__label__en' ]
-[ 0.003564052516594529, '__label__pt' ]
-[ 0.0033803132828325033, '__label__de' ]
-[ 0.0029722510371357203, '__label__ru' ]
-[ 0.0026135812513530254, '__label__te' ]
-Merhaba dünya. Bu da türkçe
-[ 0.8115067481994629, '__label__tr' ]
-[ 0.03630346059799194, '__label__az' ]
-[ 0.02223432995378971, '__label__de' ]
-[ 0.018536636605858803, '__label__jv' ]
-[ 0.014385990798473358, '__label__hu' ]
-```
-### Train unsupervised
-Prepare the example input text normalizing it
-```
-cd script/
-./normalize.sh ../examples/dataset/shakespeare.txt ../examples/dataset/shakespeare.norm.txt
+通过 es6 import 语法引入 wasm 和模型，不需要 `fs` 或 `fetch`，在 Electron 环境中特别有用。
+
+缺省模型：`lid.176.ftz`
+
+```js
+const { initFastText } = require("../dist/fasttext.es.js");
+
+initFastText().then((x) => {
+    // load wasm
+    const ft = x.FastText();
+    ft.loadModel().then((model) => {
+        const text = "Hello, world. This is english";
+        console.log(model.identify(text));
+        // { alpha3: 'eng', alpha2: 'en', refName: 'English' }
+    });
+});
 ```
 
-We now train the unsupervised model
-```
-cd wasm/
-node train_unsupervised.js
-``` 
-### Train supervised
-Prepare the example input dataset splitting 70 train 70 test
-```
-./examples/dataset/dataset.sh
-cd script/
-./split.sh ../examples/dataset/cooking_dataset.tsv ../examples/dataset 70
-Dataset:cooking_dataset.tsv ratio: 70%
-Training set:../examples/dataset/cooking_dataset_train.tsv samples: 10782
-Test set:../examples/dataset/cooking_dataset_test.tsv samnples: 4622
-```
-
-Now we train the supervised classifier model
-```
-cd wasm/
-node train_supervised.js
-``` 
-
-
-## How to build
-
-### Compile from FastText sources
-If you want to compile the module again from source please use the provided `Makefile` file and copy it to fastText folder, then build `wasm` target:
-```
-git clone https://github.com/loretoparisi/fasttext.js.git
-git clone https://github.com/facebookresearch/fastText.git
-cp fasttext.js/wasm/Makefile fastText/
-cd fastText
-wasm clean
-wasm make
-cd webassembly/
-cp *.wasm fasttext.js/wasm/
-cp fasttext_wasm.js fasttext.js/wasm/
-```
-
-### Changes for NodeJS
-Apply the following changes to the `fasttext_wasm.js` javascript files: `export default FastTextModule;` => `module.exports = FastTextModule;` (last line).
+此库仅用于推理，不用于训练。
