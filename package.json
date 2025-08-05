@@ -1,0 +1,38 @@
+{
+    "name": "fasttext_wasm",
+    "version": "1.4.0",
+    "description": "",
+    "main": "./dist/fasttext.umd.js",
+    "module": "./dist/fasttext.es.js",
+    "exports": {
+        ".": {
+            "import": "./dist/fasttext.es.js",
+            "require": "./dist/fasttext.umd.js"
+        }
+    },
+    "homepage": "https://github.com/xushengfeng/fasttext",
+    "type": "module",
+    "types": "./src/main.ts",
+    "scripts": {
+        "test": "vitest",
+        "dev": "vite --host 0.0.0.0",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "keywords": [],
+    "files": [
+        "dist/",
+        "src/"
+    ],
+    "author": "",
+    "license": "Apache-2.0",
+    "devDependencies": {
+        "@biomejs/biome": "^1.8.3",
+        "blueimp-md5": "^2.19.0",
+        "crypto-js": "^4.1.1",
+        "fetch-jsonp": "^1.3.0",
+        "typescript": "^5.1.3",
+        "vite": "^4.3.9",
+        "vitest": "^2.1.4"
+    }
+}
