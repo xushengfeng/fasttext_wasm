@@ -1,6 +1,6 @@
 {
     "name": "fasttext_wasm",
-    "version": "1.4.0",
+    "version": "1.0.0",
     "description": "",
     "main": "./dist/fasttext.umd.js",
     "module": "./dist/fasttext.es.js",
@@ -10,7 +10,7 @@
             "require": "./dist/fasttext.umd.js"
         }
     },
-    "homepage": "https://github.com/xushengfeng/fasttext",
+    "homepage": "https://github.com/xushengfeng/fasttext_wasm",
     "type": "module",
     "types": "./src/fasttext.ts",
     "scripts": {
