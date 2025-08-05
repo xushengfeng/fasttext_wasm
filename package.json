@@ -1,6 +1,6 @@
 {
-    "name": "fasttext_wasm",
-    "version": "1.0.1",
+    "name": "@xushengfeng/fasttext_wasm",
+    "version": "1.0.2",
     "description": "",
     "main": "./dist/fasttext.umd.js",
     "module": "./dist/fasttext.es.js",
