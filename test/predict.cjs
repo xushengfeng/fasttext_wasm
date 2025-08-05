@@ -1,4 +1,4 @@
-const { FastText, init } = require("../dist/fasttext.es.js");
+const { initFastText } = require("../dist/fasttext.es.js");
 
 const printVector = (predictions) => {
     const limit = Number.POSITIVE_INFINITY;
@@ -8,9 +8,8 @@ const printVector = (predictions) => {
     }
 };
 
-init().then(() => {
-    const ft = new FastText();
-
+initFastText().then((x) => {
+    const ft = x.FastText();
     ft.loadModel().then((model) => {
         let text = "Bonjour à tous. Ceci est du français";
         console.log(text);

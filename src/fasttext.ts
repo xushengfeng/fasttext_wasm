@@ -6,22 +6,20 @@ const lanJ = JSON.parse(lanJson) as Record<
     { alpha3: string; alpha2: string | null; refName: string }
 >;
 
-var fastTextModule = null;
-
-const _initFastTextModule: (options: {
+const _initFastTextModule: (options?: {
     wasm?: ArrayBuffer;
-}) => Promise<boolean> = async ({ wasm }) => {
-    fastTextModule = await fastTextModularized({
+}) => Promise<{ FastText: () => FastText }> = async (x) => {
+    const fastTextModule = await fastTextModularized({
         wasmBinary:
-            wasm ??
+            x?.wasm ??
             (await import("../assets/fasttext_wasm.wasm?binary")).default,
     });
-    return true;
+    return { FastText: () => new FastText(fastTextModule) };
 };
 
 const modelFileInWasmFs = "model.bin";
 
-const getFloat32ArrayFromHeap = (len) => {
+const getFloat32ArrayFromHeap = (len: number, fastTextModule) => {
     const dataBytes = len * Float32Array.BYTES_PER_ELEMENT;
     const dataPtr = fastTextModule._malloc(dataBytes);
     const dataHeap = new Uint8Array(
@@ -39,8 +37,10 @@ const getFloat32ArrayFromHeap = (len) => {
 const heapToFloat32 = (r) => new Float32Array(r.buffer, r.ptr, r.size);
 
 class FastText {
-    constructor() {
-        this.f = new fastTextModule.FastText();
+    fastTextModule;
+    constructor(fastTextModule) {
+        this.fastTextModule = fastTextModule;
+        this.f = new this.fastTextModule.FastText();
     }
 
     /**
@@ -60,14 +60,15 @@ class FastText {
         const byteArray = new Uint8Array(
             bytes ?? (await import("../assets/lid.176.ftz?binary")).default,
         );
-        const FS = fastTextModule.FS;
+        const FS = this.fastTextModule.FS;
         FS.writeFile(modelFileInWasmFs, byteArray);
         fastTextNative.loadModel(modelFileInWasmFs);
-        return new FastTextModel(fastTextNative);
+        return new FastTextModel(fastTextNative, this.fastTextModule);
     }
 }
 
 class FastTextModel {
+    fastTextModule;
     /**
      * `FastTextModel` represents a trained model.
      *
@@ -76,8 +77,9 @@ class FastTextModel {
      * @param {object}       fastTextNative
      *     webassembly object that makes the bridge between js and C++
      */
-    constructor(fastTextNative) {
+    constructor(fastTextNative, fastTextModule) {
         this.f = fastTextNative;
+        this.fastTextModule = fastTextModule;
     }
 
     /**
@@ -109,7 +111,10 @@ class FastTextModel {
      *
      */
     getWordVector(word) {
-        const b = getFloat32ArrayFromHeap(this.getDimension());
+        const b = getFloat32ArrayFromHeap(
+            this.getDimension(),
+            this.fastTextModule,
+        );
         this.f.getWordVector(b, word);
 
         return heapToFloat32(b);
@@ -128,7 +133,10 @@ class FastTextModel {
             ("sentence vector processes one line at a time (remove '\\n')");
         }
         text += "\n";
-        const b = getFloat32ArrayFromHeap(this.getDimension());
+        const b = getFloat32ArrayFromHeap(
+            this.getDimension(),
+            this.fastTextModule,
+        );
         this.f.getSentenceVector(b, text);
 
         return heapToFloat32(b);
@@ -220,7 +228,10 @@ class FastTextModel {
      *
      */
     getInputVector(ind) {
-        const b = getFloat32ArrayFromHeap(this.getDimension());
+        const b = getFloat32ArrayFromHeap(
+            this.getDimension(),
+            this.fastTextModule,
+        );
         this.f.getInputVector(b, ind);
 
         return heapToFloat32(b);
@@ -339,4 +350,4 @@ class FastTextModel {
     }
 }
 
-export { FastText, _initFastTextModule as init };
+export { _initFastTextModule as initFastText };
