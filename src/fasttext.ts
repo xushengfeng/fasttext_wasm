@@ -50,8 +50,6 @@ class FastText {
     fastTextModule: FastTextModule;
     f: FastTextCore;
     constructor(fastTextModule: FastTextModule) {
-        console.log(fastTextModule);
-
         this.fastTextModule = fastTextModule;
         this.f = new this.fastTextModule.FastText();
     }
