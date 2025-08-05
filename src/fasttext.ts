@@ -1,11 +1,10 @@
-/**
- * Copyright (c) 2016-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- */
+/// <reference types="vite/client" />
 import fastTextModularized from "./fasttext_wasm.js";
+import lanJson from "./languages.json?raw";
+const lanJ = JSON.parse(lanJson) as Record<
+	string,
+	{ alpha3: string; alpha2: string | null; refName: string }
+>;
 
 var fastTextModule = null;
 
@@ -54,7 +53,7 @@ class FastText {
 	 */
 	loadModel(bytes: ArrayBuffer) {
 		const fastTextNative = this.f;
-		return new Promise(function (resolve, reject) {
+		return new Promise<FastTextModel>(function (resolve, reject) {
 			const byteArray = new Uint8Array(bytes);
 			const FS = fastTextModule.FS;
 			FS.writeFile(modelFileInWasmFs, byteArray);
@@ -324,6 +323,15 @@ class FastTextModel {
 	 */
 	getLine(text) {
 		return this.f.getLine(text);
+	}
+	identify(text: string) {
+		const predictions = this.predict(text);
+		const l = predictions.get(0)[1].slice("__label__".length);
+		if (l) {
+			const lj = lanJ[l];
+			return lj;
+		}
+		return undefined;
 	}
 }
 

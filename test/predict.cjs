@@ -1,4 +1,4 @@
-var { FastText, init } = require("../dist/xtranslator.es.js");
+var { FastText, init } = require("../dist/fasttext.es.js");
 const fs = require("node:fs");
 
 const printVector = function (predictions, limit) {
@@ -18,6 +18,7 @@ init({ wasm: fs.readFileSync("../assets/fasttext_wasm.wasm") }).then(() => {
 		let text = "Bonjour à tous. Ceci est du français";
 		console.log(text);
 		printVector(model.predict(text, 5, 0.0));
+		console.log(model.identify(text));
 
 		text = "Hello, world. This is english";
 		console.log(text);
