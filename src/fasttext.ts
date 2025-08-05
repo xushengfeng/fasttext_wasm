@@ -2,337 +2,341 @@
 import fastTextModularized from "./fasttext_wasm.js";
 import lanJson from "./languages.json?raw";
 const lanJ = JSON.parse(lanJson) as Record<
-	string,
-	{ alpha3: string; alpha2: string | null; refName: string }
+    string,
+    { alpha3: string; alpha2: string | null; refName: string }
 >;
 
 var fastTextModule = null;
 
-const _initFastTextModule = async function ({ wasm }) {
-	fastTextModule = await fastTextModularized({
-		wasmBinary: wasm,
-	});
-	return true;
+const _initFastTextModule: (options: {
+    wasm?: ArrayBuffer;
+}) => Promise<boolean> = async ({ wasm }) => {
+    fastTextModule = await fastTextModularized({
+        wasmBinary:
+            wasm ??
+            (await import("../assets/fasttext_wasm.wasm?binary")).default,
+    });
+    return true;
 };
 
 const modelFileInWasmFs = "model.bin";
 
 const getFloat32ArrayFromHeap = (len) => {
-	const dataBytes = len * Float32Array.BYTES_PER_ELEMENT;
-	const dataPtr = fastTextModule._malloc(dataBytes);
-	const dataHeap = new Uint8Array(
-		fastTextModule.HEAPU8.buffer,
-		dataPtr,
-		dataBytes,
-	);
-	return {
-		ptr: dataHeap.byteOffset,
-		size: len,
-		buffer: dataHeap.buffer,
-	};
+    const dataBytes = len * Float32Array.BYTES_PER_ELEMENT;
+    const dataPtr = fastTextModule._malloc(dataBytes);
+    const dataHeap = new Uint8Array(
+        fastTextModule.HEAPU8.buffer,
+        dataPtr,
+        dataBytes,
+    );
+    return {
+        ptr: dataHeap.byteOffset,
+        size: len,
+        buffer: dataHeap.buffer,
+    };
 };
 
 const heapToFloat32 = (r) => new Float32Array(r.buffer, r.ptr, r.size);
 
 class FastText {
-	constructor() {
-		this.f = new fastTextModule.FastText();
-	}
+    constructor() {
+        this.f = new fastTextModule.FastText();
+    }
 
-	/**
-	 * loadModel
-	 *
-	 * Loads the model file from the specified url, and returns the
-	 * corresponding `FastTextModel` object.
-	 *
-	 * @param {string}     url
-	 *     the url of the model file.
-	 *
-	 * @return {Promise}   promise object that resolves to a `FastTextModel`
-	 *
-	 */
-	loadModel(bytes: ArrayBuffer) {
-		const fastTextNative = this.f;
-		return new Promise<FastTextModel>(function (resolve, reject) {
-			const byteArray = new Uint8Array(bytes);
-			const FS = fastTextModule.FS;
-			FS.writeFile(modelFileInWasmFs, byteArray);
-			fastTextNative.loadModel(modelFileInWasmFs);
-			resolve(new FastTextModel(fastTextNative));
-		});
-	}
+    /**
+     * loadModel
+     *
+     * Loads the model file from the specified url, and returns the
+     * corresponding `FastTextModel` object.
+     *
+     * @param {string}     url
+     *     the url of the model file.
+     *
+     * @return {Promise}   promise object that resolves to a `FastTextModel`
+     *
+     */
+    async loadModel(bytes?: ArrayBuffer) {
+        const fastTextNative = this.f;
+        const byteArray = new Uint8Array(
+            bytes ?? (await import("../assets/lid.176.ftz?binary")).default,
+        );
+        const FS = fastTextModule.FS;
+        FS.writeFile(modelFileInWasmFs, byteArray);
+        fastTextNative.loadModel(modelFileInWasmFs);
+        return new FastTextModel(fastTextNative);
+    }
 }
 
 class FastTextModel {
-	/**
-	 * `FastTextModel` represents a trained model.
-	 *
-	 * @constructor
-	 *
-	 * @param {object}       fastTextNative
-	 *     webassembly object that makes the bridge between js and C++
-	 */
-	constructor(fastTextNative) {
-		this.f = fastTextNative;
-	}
+    /**
+     * `FastTextModel` represents a trained model.
+     *
+     * @constructor
+     *
+     * @param {object}       fastTextNative
+     *     webassembly object that makes the bridge between js and C++
+     */
+    constructor(fastTextNative) {
+        this.f = fastTextNative;
+    }
 
-	/**
-	 * isQuant
-	 *
-	 * @return {bool}   true if the model is quantized
-	 *
-	 */
-	isQuant() {
-		return this.f.isQuant;
-	}
+    /**
+     * isQuant
+     *
+     * @return {bool}   true if the model is quantized
+     *
+     */
+    isQuant() {
+        return this.f.isQuant;
+    }
 
-	/**
-	 * getDimension
-	 *
-	 * @return {int}    the dimension (size) of a lookup vector (hidden layer)
-	 *
-	 */
-	getDimension() {
-		return this.f.args.dim;
-	}
+    /**
+     * getDimension
+     *
+     * @return {int}    the dimension (size) of a lookup vector (hidden layer)
+     *
+     */
+    getDimension() {
+        return this.f.args.dim;
+    }
 
-	/**
-	 * getWordVector
-	 *
-	 * @param {string}          word
-	 *
-	 * @return {Float32Array}   the vector representation of `word`.
-	 *
-	 */
-	getWordVector(word) {
-		const b = getFloat32ArrayFromHeap(this.getDimension());
-		this.f.getWordVector(b, word);
+    /**
+     * getWordVector
+     *
+     * @param {string}          word
+     *
+     * @return {Float32Array}   the vector representation of `word`.
+     *
+     */
+    getWordVector(word) {
+        const b = getFloat32ArrayFromHeap(this.getDimension());
+        this.f.getWordVector(b, word);
 
-		return heapToFloat32(b);
-	}
+        return heapToFloat32(b);
+    }
 
-	/**
-	 * getSentenceVector
-	 *
-	 * @param {string}          text
-	 *
-	 * @return {Float32Array}   the vector representation of `text`.
-	 *
-	 */
-	getSentenceVector(text) {
-		if (text.indexOf("\n") != -1) {
-			("sentence vector processes one line at a time (remove '\\n')");
-		}
-		text += "\n";
-		const b = getFloat32ArrayFromHeap(this.getDimension());
-		this.f.getSentenceVector(b, text);
+    /**
+     * getSentenceVector
+     *
+     * @param {string}          text
+     *
+     * @return {Float32Array}   the vector representation of `text`.
+     *
+     */
+    getSentenceVector(text) {
+        if (text.indexOf("\n") != -1) {
+            ("sentence vector processes one line at a time (remove '\\n')");
+        }
+        text += "\n";
+        const b = getFloat32ArrayFromHeap(this.getDimension());
+        this.f.getSentenceVector(b, text);
 
-		return heapToFloat32(b);
-	}
+        return heapToFloat32(b);
+    }
 
-	/**
-	 * getNearestNeighbors
-	 *
-	 * returns the nearest `k` neighbors of `word`.
-	 *
-	 * @param {string}          word
-	 * @param {int}             k
-	 *
-	 * @return {Array.<Pair.<number, string>>}
-	 *     words and their corresponding cosine similarities.
-	 *
-	 */
-	getNearestNeighbors(word, k = 10) {
-		return this.f.getNN(word, k);
-	}
+    /**
+     * getNearestNeighbors
+     *
+     * returns the nearest `k` neighbors of `word`.
+     *
+     * @param {string}          word
+     * @param {int}             k
+     *
+     * @return {Array.<Pair.<number, string>>}
+     *     words and their corresponding cosine similarities.
+     *
+     */
+    getNearestNeighbors(word, k = 10) {
+        return this.f.getNN(word, k);
+    }
 
-	/**
-	 * getAnalogies
-	 *
-	 * returns the nearest `k` neighbors of the operation
-	 * `wordA - wordB + wordC`.
-	 *
-	 * @param {string}          wordA
-	 * @param {string}          wordB
-	 * @param {string}          wordC
-	 * @param {int}             k
-	 *
-	 * @return {Array.<Pair.<number, string>>}
-	 *     words and their corresponding cosine similarities
-	 *
-	 */
-	getAnalogies(wordA, wordB, wordC, k) {
-		return this.f.getAnalogies(k, wordA, wordB, wordC);
-	}
+    /**
+     * getAnalogies
+     *
+     * returns the nearest `k` neighbors of the operation
+     * `wordA - wordB + wordC`.
+     *
+     * @param {string}          wordA
+     * @param {string}          wordB
+     * @param {string}          wordC
+     * @param {int}             k
+     *
+     * @return {Array.<Pair.<number, string>>}
+     *     words and their corresponding cosine similarities
+     *
+     */
+    getAnalogies(wordA, wordB, wordC, k) {
+        return this.f.getAnalogies(k, wordA, wordB, wordC);
+    }
 
-	/**
-	 * getWordId
-	 *
-	 * Given a word, get the word id within the dictionary.
-	 * Returns -1 if word is not in the dictionary.
-	 *
-	 * @return {int}    word id
-	 *
-	 */
-	getWordId(word) {
-		return this.f.getWordId(word);
-	}
+    /**
+     * getWordId
+     *
+     * Given a word, get the word id within the dictionary.
+     * Returns -1 if word is not in the dictionary.
+     *
+     * @return {int}    word id
+     *
+     */
+    getWordId(word) {
+        return this.f.getWordId(word);
+    }
 
-	/**
-	 * getSubwordId
-	 *
-	 * Given a subword, return the index (within input matrix) it hashes to.
-	 *
-	 * @return {int}    subword id
-	 *
-	 */
-	getSubwordId(subword) {
-		return this.f.getSubwordId(subword);
-	}
+    /**
+     * getSubwordId
+     *
+     * Given a subword, return the index (within input matrix) it hashes to.
+     *
+     * @return {int}    subword id
+     *
+     */
+    getSubwordId(subword) {
+        return this.f.getSubwordId(subword);
+    }
 
-	/**
-	 * getSubwords
-	 *
-	 * returns the subwords and their indicies.
-	 *
-	 * @param {string}          word
-	 *
-	 * @return {Pair.<Array.<string>, Array.<int>>}
-	 *     words and their corresponding indicies
-	 *
-	 */
-	getSubwords(word) {
-		return this.f.getSubwords(word);
-	}
+    /**
+     * getSubwords
+     *
+     * returns the subwords and their indicies.
+     *
+     * @param {string}          word
+     *
+     * @return {Pair.<Array.<string>, Array.<int>>}
+     *     words and their corresponding indicies
+     *
+     */
+    getSubwords(word) {
+        return this.f.getSubwords(word);
+    }
 
-	/**
-	 * getInputVector
-	 *
-	 * Given an index, get the corresponding vector of the Input Matrix.
-	 *
-	 * @param {int}             ind
-	 *
-	 * @return {Float32Array}   the vector of the `ind`'th index
-	 *
-	 */
-	getInputVector(ind) {
-		const b = getFloat32ArrayFromHeap(this.getDimension());
-		this.f.getInputVector(b, ind);
+    /**
+     * getInputVector
+     *
+     * Given an index, get the corresponding vector of the Input Matrix.
+     *
+     * @param {int}             ind
+     *
+     * @return {Float32Array}   the vector of the `ind`'th index
+     *
+     */
+    getInputVector(ind) {
+        const b = getFloat32ArrayFromHeap(this.getDimension());
+        this.f.getInputVector(b, ind);
 
-		return heapToFloat32(b);
-	}
+        return heapToFloat32(b);
+    }
 
-	/**
-	 * predict
-	 *
-	 * Given a string, get a list of labels and a list of corresponding
-	 * probabilities. k controls the number of returned labels.
-	 *
-	 * @param {string}          text
-	 * @param {int}             k, the number of predictions to be returned
-	 * @param {number}          probability threshold
-	 *
-	 * @return {Array.<Pair.<number, string>>}
-	 *     labels and their probabilities
-	 *
-	 */
-	predict(text, k = 1, threshold = 0.0) {
-		return this.f.predict(text, k, threshold);
-	}
+    /**
+     * predict
+     *
+     * Given a string, get a list of labels and a list of corresponding
+     * probabilities. k controls the number of returned labels.
+     *
+     * @param {string}          text
+     * @param {int}             k, the number of predictions to be returned
+     * @param {number}          probability threshold
+     *
+     * @return {Array.<Pair.<number, string>>}
+     *     labels and their probabilities
+     *
+     */
+    predict(text, k = 1, threshold = 0.0) {
+        return this.f.predict(text, k, threshold);
+    }
 
-	/**
-	 * getInputMatrix
-	 *
-	 * Get a reference to the full input matrix of a Model. This only
-	 * works if the model is not quantized.
-	 *
-	 * @return {DenseMatrix}
-	 *     densematrix with functions: `rows`, `cols`, `at(i,j)`
-	 *
-	 * example:
-	 *     let inputMatrix = model.getInputMatrix();
-	 *     let value = inputMatrix.at(1, 2);
-	 */
-	getInputMatrix() {
-		if (this.isQuant()) {
-			throw new Error("Can't get quantized Matrix");
-		}
-		return this.f.getInputMatrix();
-	}
+    /**
+     * getInputMatrix
+     *
+     * Get a reference to the full input matrix of a Model. This only
+     * works if the model is not quantized.
+     *
+     * @return {DenseMatrix}
+     *     densematrix with functions: `rows`, `cols`, `at(i,j)`
+     *
+     * example:
+     *     let inputMatrix = model.getInputMatrix();
+     *     let value = inputMatrix.at(1, 2);
+     */
+    getInputMatrix() {
+        if (this.isQuant()) {
+            throw new Error("Can't get quantized Matrix");
+        }
+        return this.f.getInputMatrix();
+    }
 
-	/**
-	 * getOutputMatrix
-	 *
-	 * Get a reference to the full input matrix of a Model. This only
-	 * works if the model is not quantized.
-	 *
-	 * @return {DenseMatrix}
-	 *     densematrix with functions: `rows`, `cols`, `at(i,j)`
-	 *
-	 * example:
-	 *     let outputMatrix = model.getOutputMatrix();
-	 *     let value = outputMatrix.at(1, 2);
-	 */
-	getOutputMatrix() {
-		if (this.isQuant()) {
-			throw new Error("Can't get quantized Matrix");
-		}
-		return this.f.getOutputMatrix();
-	}
+    /**
+     * getOutputMatrix
+     *
+     * Get a reference to the full input matrix of a Model. This only
+     * works if the model is not quantized.
+     *
+     * @return {DenseMatrix}
+     *     densematrix with functions: `rows`, `cols`, `at(i,j)`
+     *
+     * example:
+     *     let outputMatrix = model.getOutputMatrix();
+     *     let value = outputMatrix.at(1, 2);
+     */
+    getOutputMatrix() {
+        if (this.isQuant()) {
+            throw new Error("Can't get quantized Matrix");
+        }
+        return this.f.getOutputMatrix();
+    }
 
-	/**
-	 * getWords
-	 *
-	 * Get the entire list of words of the dictionary including the frequency
-	 * of the individual words. This does not include any subwords. For that
-	 * please consult the function get_subwords.
-	 *
-	 * @return {Pair.<Array.<string>, Array.<int>>}
-	 *     words and their corresponding frequencies
-	 *
-	 */
-	getWords() {
-		return this.f.getWords();
-	}
+    /**
+     * getWords
+     *
+     * Get the entire list of words of the dictionary including the frequency
+     * of the individual words. This does not include any subwords. For that
+     * please consult the function get_subwords.
+     *
+     * @return {Pair.<Array.<string>, Array.<int>>}
+     *     words and their corresponding frequencies
+     *
+     */
+    getWords() {
+        return this.f.getWords();
+    }
 
-	/**
-	 * getLabels
-	 *
-	 * Get the entire list of labels of the dictionary including the frequency
-	 * of the individual labels.
-	 *
-	 * @return {Pair.<Array.<string>, Array.<int>>}
-	 *     labels and their corresponding frequencies
-	 *
-	 */
-	getLabels() {
-		return this.f.getLabels();
-	}
+    /**
+     * getLabels
+     *
+     * Get the entire list of labels of the dictionary including the frequency
+     * of the individual labels.
+     *
+     * @return {Pair.<Array.<string>, Array.<int>>}
+     *     labels and their corresponding frequencies
+     *
+     */
+    getLabels() {
+        return this.f.getLabels();
+    }
 
-	/**
-	 * getLine
-	 *
-	 * Split a line of text into words and labels. Labels must start with
-	 * the prefix used to create the model (__label__ by default).
-	 *
-	 * @param {string}          text
-	 *
-	 * @return {Pair.<Array.<string>, Array.<string>>}
-	 *     words and labels
-	 *
-	 */
-	getLine(text) {
-		return this.f.getLine(text);
-	}
-	identify(text: string) {
-		const predictions = this.predict(text);
-		const l = predictions.get(0)[1].slice("__label__".length);
-		if (l) {
-			const lj = lanJ[l];
-			return lj;
-		}
-		return undefined;
-	}
+    /**
+     * getLine
+     *
+     * Split a line of text into words and labels. Labels must start with
+     * the prefix used to create the model (__label__ by default).
+     *
+     * @param {string}          text
+     *
+     * @return {Pair.<Array.<string>, Array.<string>>}
+     *     words and labels
+     *
+     */
+    getLine(text) {
+        return this.f.getLine(text);
+    }
+    identify(text: string) {
+        const predictions = this.predict(text);
+        const l = predictions.get(0)[1].slice("__label__".length);
+        if (l) {
+            const lj = lanJ[l];
+            return lj;
+        }
+        return undefined;
+    }
 }
 
 export { FastText, _initFastTextModule as init };
