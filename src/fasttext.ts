@@ -1,5 +1,12 @@
 /// <reference types="vite/client" />
 import fastTextModularized from "./fasttext_wasm.js";
+import type {
+    FastTextCore,
+    FastTextModule,
+    int,
+    Pair,
+    Vector,
+} from "./fastText.d.ts";
 import lanJson from "./languages.json?raw";
 const lanJ = JSON.parse(lanJson) as Record<
     string,
@@ -19,7 +26,10 @@ const _initFastTextModule: (options?: {
 
 const modelFileInWasmFs = "model.bin";
 
-const getFloat32ArrayFromHeap = (len: number, fastTextModule) => {
+const getFloat32ArrayFromHeap = (
+    len: number,
+    fastTextModule: FastTextModule,
+) => {
     const dataBytes = len * Float32Array.BYTES_PER_ELEMENT;
     const dataPtr = fastTextModule._malloc(dataBytes);
     const dataHeap = new Uint8Array(
@@ -37,24 +47,14 @@ const getFloat32ArrayFromHeap = (len: number, fastTextModule) => {
 const heapToFloat32 = (r) => new Float32Array(r.buffer, r.ptr, r.size);
 
 class FastText {
-    fastTextModule;
-    constructor(fastTextModule) {
+    fastTextModule: FastTextModule;
+    f: FastTextCore;
+    constructor(fastTextModule: FastTextModule) {
+        console.log(fastTextModule);
+
         this.fastTextModule = fastTextModule;
         this.f = new this.fastTextModule.FastText();
     }
-
-    /**
-     * loadModel
-     *
-     * Loads the model file from the specified url, and returns the
-     * corresponding `FastTextModel` object.
-     *
-     * @param {string}     url
-     *     the url of the model file.
-     *
-     * @return {Promise}   promise object that resolves to a `FastTextModel`
-     *
-     */
     async loadModel(bytes?: ArrayBuffer) {
         const fastTextNative = this.f;
         const byteArray = new Uint8Array(
@@ -68,16 +68,9 @@ class FastText {
 }
 
 class FastTextModel {
-    fastTextModule;
-    /**
-     * `FastTextModel` represents a trained model.
-     *
-     * @constructor
-     *
-     * @param {object}       fastTextNative
-     *     webassembly object that makes the bridge between js and C++
-     */
-    constructor(fastTextNative, fastTextModule) {
+    fastTextModule: FastTextModule;
+    f: FastTextCore;
+    constructor(fastTextNative: FastTextCore, fastTextModule: FastTextModule) {
         this.f = fastTextNative;
         this.fastTextModule = fastTextModule;
     }
@@ -85,7 +78,7 @@ class FastTextModel {
     /**
      * isQuant
      *
-     * @return {bool}   true if the model is quantized
+     * @return true if the model is quantized
      *
      */
     isQuant() {
@@ -95,22 +88,22 @@ class FastTextModel {
     /**
      * getDimension
      *
-     * @return {int}    the dimension (size) of a lookup vector (hidden layer)
+     * @return   the dimension (size) of a lookup vector (hidden layer)
      *
      */
-    getDimension() {
+    getDimension(): int {
         return this.f.args.dim;
     }
 
     /**
      * getWordVector
      *
-     * @param {string}          word
+     * @param     word
      *
-     * @return {Float32Array}   the vector representation of `word`.
+     * @return   the vector representation of `word`.
      *
      */
-    getWordVector(word) {
+    getWordVector(word: string): Float32Array {
         const b = getFloat32ArrayFromHeap(
             this.getDimension(),
             this.fastTextModule,
@@ -123,13 +116,14 @@ class FastTextModel {
     /**
      * getSentenceVector
      *
-     * @param {string}          text
+     * @param          text
      *
-     * @return {Float32Array}   the vector representation of `text`.
+     * @return   the vector representation of `text`.
      *
      */
-    getSentenceVector(text) {
-        if (text.indexOf("\n") != -1) {
+    getSentenceVector(_text: string): Float32Array {
+        let text = _text;
+        if (text.indexOf("\n") !== -1) {
             ("sentence vector processes one line at a time (remove '\\n')");
         }
         text += "\n";
@@ -150,11 +144,14 @@ class FastTextModel {
      * @param {string}          word
      * @param {int}             k
      *
-     * @return {Array.<Pair.<number, string>>}
+     * @return
      *     words and their corresponding cosine similarities.
      *
      */
-    getNearestNeighbors(word, k = 10) {
+    getNearestNeighbors(
+        word: string,
+        k: int = 10,
+    ): Vector<Pair<number, string>> {
         return this.f.getNN(word, k);
     }
 
@@ -169,11 +166,16 @@ class FastTextModel {
      * @param {string}          wordC
      * @param {int}             k
      *
-     * @return {Array.<Pair.<number, string>>}
+     * @return
      *     words and their corresponding cosine similarities
      *
      */
-    getAnalogies(wordA, wordB, wordC, k) {
+    getAnalogies(
+        wordA: string,
+        wordB: string,
+        wordC: string,
+        k: int,
+    ): Vector<Pair<number, string>> {
         return this.f.getAnalogies(k, wordA, wordB, wordC);
     }
 
@@ -186,7 +188,7 @@ class FastTextModel {
      * @return {int}    word id
      *
      */
-    getWordId(word) {
+    getWordId(word: string): int {
         return this.f.getWordId(word);
     }
 
@@ -198,7 +200,7 @@ class FastTextModel {
      * @return {int}    subword id
      *
      */
-    getSubwordId(subword) {
+    getSubwordId(subword: string): int {
         return this.f.getSubwordId(subword);
     }
 
@@ -213,7 +215,7 @@ class FastTextModel {
      *     words and their corresponding indicies
      *
      */
-    getSubwords(word) {
+    getSubwords(word: string): Pair<Array<string>, Array<int>> {
         return this.f.getSubwords(word);
     }
 
@@ -227,7 +229,7 @@ class FastTextModel {
      * @return {Float32Array}   the vector of the `ind`'th index
      *
      */
-    getInputVector(ind) {
+    getInputVector(ind: int) {
         const b = getFloat32ArrayFromHeap(
             this.getDimension(),
             this.fastTextModule,
@@ -247,11 +249,11 @@ class FastTextModel {
      * @param {int}             k, the number of predictions to be returned
      * @param {number}          probability threshold
      *
-     * @return {Array.<Pair.<number, string>>}
+     * @return
      *     labels and their probabilities
      *
      */
-    predict(text, k = 1, threshold = 0.0) {
+    predict(text: string, k: int = 1, threshold = 0.0) {
         return this.f.predict(text, k, threshold);
     }
 
@@ -261,7 +263,7 @@ class FastTextModel {
      * Get a reference to the full input matrix of a Model. This only
      * works if the model is not quantized.
      *
-     * @return {DenseMatrix}
+     * @return
      *     densematrix with functions: `rows`, `cols`, `at(i,j)`
      *
      * example:
@@ -281,7 +283,7 @@ class FastTextModel {
      * Get a reference to the full input matrix of a Model. This only
      * works if the model is not quantized.
      *
-     * @return {DenseMatrix}
+     * @return
      *     densematrix with functions: `rows`, `cols`, `at(i,j)`
      *
      * example:
@@ -302,7 +304,7 @@ class FastTextModel {
      * of the individual words. This does not include any subwords. For that
      * please consult the function get_subwords.
      *
-     * @return {Pair.<Array.<string>, Array.<int>>}
+     * @return
      *     words and their corresponding frequencies
      *
      */
@@ -316,7 +318,7 @@ class FastTextModel {
      * Get the entire list of labels of the dictionary including the frequency
      * of the individual labels.
      *
-     * @return {Pair.<Array.<string>, Array.<int>>}
+     * @return
      *     labels and their corresponding frequencies
      *
      */
@@ -332,11 +334,11 @@ class FastTextModel {
      *
      * @param {string}          text
      *
-     * @return {Pair.<Array.<string>, Array.<string>>}
+     * @return
      *     words and labels
      *
      */
-    getLine(text) {
+    getLine(text: string) {
         return this.f.getLine(text);
     }
     identify(text: string) {
