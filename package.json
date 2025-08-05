@@ -1,7 +1,7 @@
 {
     "name": "@xushengfeng/fasttext_wasm",
-    "version": "1.0.2",
-    "description": "",
+    "version": "1.0.3",
+    "description": "fasttext wasm version, easy to import",
     "main": "./dist/fasttext.umd.js",
     "module": "./dist/fasttext.es.js",
     "exports": {
@@ -19,7 +19,10 @@
         "build": "vite build",
         "preview": "vite preview"
     },
-    "keywords": [],
+    "keywords": [
+        "fasttext",
+        "wasm"
+    ],
     "files": [
         "dist/",
         "src/**.ts"
